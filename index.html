@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>משחק הפתעה!</title>
+    <style>
+        /* איפוס ועיצוב בסיסי */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden; /* מניעת גלילה */
+            touch-action: none; /* מניעת זום וגלילה בסלולר */
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+            font-family: 'Comic Sans MS', 'Fredoka One', cursive, sans-serif;
+            user-select: none;
+        }
+
+        /* הגדרות קנבס */
+        #gameCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* ממשק משתמש - ניקוד */
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            font-size: 30px;
+            color: #fff;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+            z-index: 10;
+        }
+
+        /* מסך פתיחה (חובה בשביל אישור ניגון סאונד בדפדפן) */
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 30;
+        }
+
+        #start-btn {
+            background: #ff5e62;
+            color: white;
+            border: none;
+            padding: 20px 40px;
+            font-size: 28px;
+            border-radius: 50px;
+            box-shadow: 0 6px 0 #d9383e, 0 10px 20px rgba(0,0,0,0.3);
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        #start-btn:active {
+            transform: translateY(6px);
+            box-shadow: 0 0 0 #d9383e, 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        /* חלון פופ-אפ לתמונה המשותפת */
+        #popup-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(255, 255, 255, 0.85);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            backdrop-filter: blur(5px);
+        }
+
+        #popup-image {
+            max-width: 80%;
+            max-height: 60%;
+            border: 8px solid #fff;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            object-fit: contain;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .continue-hint {
+            margin-top: 30px;
+            font-size: 24px;
+            color: #333;
+            font-weight: bold;
+            animation: pulse 1.5s infinite;
+        }
+
+        /* אנימציות */
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="scoreDisplay">נקודות: 0</div>
+    </div>
+
+    <div id="start-screen">
+        <h2 style="color:white; margin-bottom: 20px; font-family: inherit;">🎉יום הולדת שמח מושלמת שלי!😘🎉</h2>
+	     <h2 style="color:white; margin-bottom: 20px; font-family: inherit;">❤️הכניסי סיסמה❤️</h2>
+        <input type="password" id="game-password" placeholder="רמז: מתי נולדת?" style="padding: 10px; font-size: 20px; border-radius: 10px; border: none; margin-bottom: 20px; text-align: center; width: 80%; max-width: 300px; font-family: inherit;">
+        <button id="start-btn">🤩התחילי משחק!🤩</button>
+        <div id="error-msg" style="color: #ff9999; margin-top: 15px; font-size: 18px; display: none;">סיסמה שגויה, נסי שוב!</div>
+    </div>
+
+    <div id="popup-screen">
+        <img id="popup-image" src="" alt="תמונה משותפת">
+        <div class="continue-hint">לחצי על התמונה כדי להמשיך לשחק!</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const GAME_CONFIG = {
+            player: {
+                image: 'ayala_head.png',
+                width: 100, 
+                height: 100 
+            },
+            fallingObjects: [
+                {
+                    id: 'shalev',
+                    image: 'shalev.png',
+                    popups: ['shalev_1.png', 'shalev_2.png', 'shalev_3.png'],
+                    width: 80, height: 80,
+                    weight: 30 // תדירות רגילה
+                },
+                {
+                    id: 'kid1',
+                    image: 'yarden.png',
+                    popups: ['yarden_1.png', 'yarden_2.png', 'yarden_3.png', 'yarden_4.png', 'yarden_5.png', 'yarden_6.png', 'yarden_7.png'],
+                    width: 80, height: 80,
+                    weight: 30 
+                },
+                {
+                    id: 'kid2',
+                    image: 'hadar.png',
+                    popups: ['hadar_1.png', 'hadar_2.png', 'hadar_3.png', 'hadar_4.png', 'hadar_5.png', 'hadar_6.png', 'hadar_7.png', 'hadar_8.png'],
+                    width: 80, height: 80,
+                    weight: 30
+                },
+                {
+                    id: 'eliraz',
+                    image: 'eliraz.png',
+                    popups: ['eliraz_1.png'],
+                    width: 80, height: 80,
+                    weight: 5 // הוקטן - יופיע בתדירות נמוכה יותר
+                },
+                {
+                    id: 'roni',
+                    image: 'roni.png',
+                    popups: ['roni_1.png', 'roni_2.png', 'roni_3.png'],
+                    width: 80, height: 80,
+                    weight: 5
+                },
+                {
+                    id: 'mom',
+                    image: 'mom.png',
+                    popups: ['mom_1.png', 'mom_2.png', 'mom_3.png'],
+                    width: 80, height: 80,
+                    weight: 5
+                },
+                {
+                    id: 'neta',
+                    image: 'neta.png',
+                    popups: ['neta_1.png', 'neta_2.png', 'neta_3.png'],
+                    width: 80, height: 80,
+                    weight: 5
+                },
+                {
+                    id: 'dad',
+                    image: 'dad.png',
+                    popups: ['dad_1.png', 'dad_2.png', 'dad_3.png'],
+                    width: 80, height: 80,
+                    weight: 5
+                },
+                {
+                    id: 'batsheva',
+                    image: 'batsheva.png',
+                    popups: ['batsheva_1.png', 'batsheva_2.png', 'batsheva_3.png'],
+                    width: 80, height: 80,
+                    weight: 5
+                },
+                {
+                    id: 'shimon',
+                    image: 'shimon.png',
+                    popups: ['shimon_1.png', 'shimon_2.png', 'shimon_3.png'],
+                    width: 80, height: 80,
+                    weight: 5
+                }
+            ],
+            audio: {
+                bgMusic: 'eliad_birthday.mp3',
+                catchSound: 'coin_sound.mp3',
+                resumeSound: 'resume_sound.mp3'
+            },
+            gameSettings: {
+                fallingSpeed: 3, 
+                spawnInterval: 1000 
+            }
+        };
+
+        const images = {};
+        let loadedImages = 0;
+        let totalImagesToLoad = 1 + GAME_CONFIG.fallingObjects.length; 
+
+        images.player = new Image();
+        images.player.src = GAME_CONFIG.player.image;
+        
+        GAME_CONFIG.fallingObjects.forEach(obj => {
+            images[obj.id] = new Image();
+            images[obj.id].src = obj.image;
+        });
+
+        const bgMusic = new Audio(GAME_CONFIG.audio.bgMusic);
+        bgMusic.loop = true;
+        const catchSound = new Audio(GAME_CONFIG.audio.catchSound);
+        const resumeSound = new Audio(GAME_CONFIG.audio.resumeSound);
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const startScreen = document.getElementById('start-screen');
+        const startBtn = document.getElementById('start-btn');
+        const popupScreen = document.getElementById('popup-screen');
+        const popupImage = document.getElementById('popup-image');
+
+        let width, height;
+        let score = 0;
+        let isPaused = false;
+        let activeObjects = [];
+        let lastSpawnTime = 0;
+        let animationFrameId;
+
+        // מערך חי דינמי שעוקב אחרי הדמויות שנותרו והתמונות שלא הוצגו
+        let availableCharacters = GAME_CONFIG.fallingObjects.map(obj => ({
+            ...obj,
+            popups: [...obj.popups] // שומר העתק של מערך התמונות שנוכל למחוק ממנו
+        }));
+
+        let player = {
+            x: 0,
+            y: 0,
+            width: GAME_CONFIG.player.width,
+            height: GAME_CONFIG.player.height
+        };
+
+        function resizeCanvas() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+            ctx.scale(dpr, dpr);
+            
+            player.y = height - player.height - 20; 
+            if (player.x === 0 || player.x > width) {
+                player.x = width / 2;
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function handleTouch(e) {
+            if (isPaused) return; 
+            e.preventDefault(); 
+            const touchX = e.touches[0].clientX;
+            player.x = Math.max(player.width / 2, Math.min(touchX, width - player.width / 2));
+        }
+
+        canvas.addEventListener('touchstart', handleTouch, { passive: false });
+        canvas.addEventListener('touchmove', handleTouch, { passive: false });
+
+        function spawnObject() {
+            if (availableCharacters.length === 0) return; // אם אין יותר דמויות, לא נופל כלום
+
+            // בחירת דמות לפי המשקל שלה (הסתברות)
+            let totalWeight = availableCharacters.reduce((sum, char) => sum + char.weight, 0);
+            let randomNum = Math.random() * totalWeight;
+            let selectedChar = availableCharacters[0];
+
+            for (let char of availableCharacters) {
+                randomNum -= char.weight;
+                if (randomNum <= 0) {
+                    selectedChar = char;
+                    break;
+                }
+            }
+            
+            const obj = {
+                id: selectedChar.id,
+                x: Math.random() * (width - selectedChar.width) + selectedChar.width / 2,
+                y: -selectedChar.height, 
+                width: selectedChar.width,
+                height: selectedChar.height
+            };
+            activeObjects.push(obj);
+        }
+
+        function checkCollision(obj) {
+            const pBox = {
+                left: player.x - player.width / 2.5,
+                right: player.x + player.width / 2.5,
+                top: player.y,
+                bottom: player.y + player.height
+            };
+            const oBox = {
+                left: obj.x - obj.width / 2.5,
+                right: obj.x + obj.width / 2.5,
+                top: obj.y,
+                bottom: obj.y + obj.height
+            };
+
+            return (
+                pBox.left < oBox.right &&
+                pBox.right > oBox.left &&
+                pBox.top < oBox.bottom &&
+                pBox.bottom > oBox.top
+            );
+        }
+
+        function drawPlayer() {
+            if (images.player.complete && images.player.naturalWidth !== 0) {
+                ctx.drawImage(images.player, player.x - player.width / 2, player.y, player.width, player.height);
+            } else {
+                ctx.fillStyle = '#ff1493';
+                ctx.beginPath();
+                ctx.arc(player.x, player.y + player.height/2, player.width/2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawObjects() {
+            for (let i = activeObjects.length - 1; i >= 0; i--) {
+                const obj = activeObjects[i];
+                obj.y += GAME_CONFIG.gameSettings.fallingSpeed;
+
+                const img = images[obj.id];
+                if (img && img.complete && img.naturalWidth !== 0) {
+                    ctx.drawImage(img, obj.x - obj.width / 2, obj.y, obj.width, obj.height);
+                } else {
+                    ctx.fillStyle = '#ffae42';
+                    ctx.fillRect(obj.x - obj.width / 2, obj.y, obj.width, obj.height);
+                }
+
+                if (checkCollision(obj)) {
+                    handleCatch(obj, i);
+                    return; 
+                }
+
+                if (obj.y > height) {
+                    activeObjects.splice(i, 1);
+                }
+            }
+        }
+
+        function update(currentTime) {
+            if (isPaused) return; 
+
+            ctx.clearRect(0, 0, width, height);
+
+            if (currentTime - lastSpawnTime > GAME_CONFIG.gameSettings.spawnInterval) {
+                spawnObject();
+                lastSpawnTime = currentTime;
+            }
+
+            drawPlayer();
+            drawObjects();
+
+            animationFrameId = requestAnimationFrame(update);
+        }
+
+        function handleCatch(obj, index) {
+            isPaused = true;
+            cancelAnimationFrame(animationFrameId); 
+            
+            catchSound.currentTime = 0;
+            catchSound.play().catch(e => console.log("Sound play error", e));
+            score++;
+            scoreDisplay.innerText = `נקודות: ${score}`;
+            
+            // מחיקת האובייקט שנתפס מהמסך
+            activeObjects.splice(index, 1);
+
+            // איתור הדמות במאגר הדינמי
+            let charIndex = availableCharacters.findIndex(c => c.id === obj.id);
+            
+            if (charIndex !== -1) {
+                let charObj = availableCharacters[charIndex];
+                
+                // בחירת תמונה אקראית מתוך מה שנשאר
+                let popupIndex = Math.floor(Math.random() * charObj.popups.length);
+                let randomPopup = charObj.popups[popupIndex];
+                
+                // הסרת התמונה מהמאגר כדי שלא תוצג שוב
+                charObj.popups.splice(popupIndex, 1);
+                
+                // אם נגמרו התמונות לדמות הזו - נמחק אותה לחלוטין ממאגר ההגרלות
+                if (charObj.popups.length === 0) {
+                    availableCharacters.splice(charIndex, 1);
+                    // הסרת כל האובייקטים של הדמות הזו שעדיין באוויר, כדי למנוע תפיסות רפאים ללא תמונה
+                    activeObjects = activeObjects.filter(o => o.id !== obj.id);
+                }
+                
+                popupImage.src = randomPopup;
+                popupScreen.style.display = 'flex';
+            }
+        }
+
+        popupScreen.addEventListener('click', () => {
+            if (!isPaused) return;
+            
+            resumeSound.currentTime = 0;
+            resumeSound.play().catch(e => console.log("Sound play error", e));
+            
+            popupScreen.style.display = 'none';
+            isPaused = false;
+            
+            lastSpawnTime = performance.now(); 
+            animationFrameId = requestAnimationFrame(update);
+        });
+
+        startBtn.addEventListener('click', () => {
+            const passInput = document.getElementById('game-password').value;
+            // כאן אתה קובע את הסיסמה (למשל מילה או תאריך חשוב)
+            if (passInput !== "991999") { 
+                document.getElementById('error-msg').style.display = 'block';
+                return;
+            }
+
+            startScreen.style.display = 'none';
+            bgMusic.play().catch(e => console.log("BGM play error", e));
+            
+            lastSpawnTime = performance.now();
+            isPaused = false;
+            animationFrameId = requestAnimationFrame(update);
+        });
+
+    </script>
+</body>
+</html>
