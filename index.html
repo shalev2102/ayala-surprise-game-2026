@@ -109,6 +109,39 @@
             animation: pulse 1.5s infinite;
         }
 
+        /* מסך סיום הברכה */
+        #end-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 40;
+            text-align: center;
+            padding: 20px;
+            backdrop-filter: blur(5px);
+        }
+
+        #end-screen h1 {
+            color: #ff5e62;
+            font-size: 45px;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+            animation: pulse 1.5s infinite;
+        }
+
+        #end-screen p {
+            color: white;
+            font-size: 26px;
+            line-height: 1.6;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+        }
+
         /* אנימציות */
         @keyframes popIn {
             0% { transform: scale(0.5); opacity: 0; }
@@ -142,6 +175,17 @@
         <div class="continue-hint">לחצי על התמונה כדי להמשיך לשחק!</div>
     </div>
 
+    <!-- מסך הסיום שנוסף -->
+    <div id="end-screen">
+        <h1>🎉 מזל טוב! 🎉</h1>
+        <p>
+            איזה אלופה!<br>
+            תפסת את כל התמונות של כולם!<br><br>
+            המון המון מזל טוב ליום ההולדת שלך ❤️<br>
+            אוהבים אותך מלא!
+        </p>
+    </div>
+
     <canvas id="gameCanvas"></canvas>
 
     <script>
@@ -157,7 +201,7 @@
                     image: 'shalev.png',
                     popups: ['shalev_1.png', 'shalev_2.png', 'shalev_3.png', 'shalev_4.png', 'shalev_5.png'],
                     width: 80, height: 80,
-                    weight: 30 // תדירות רגילה
+                    weight: 30 
                 },
                 {
                     id: 'kid1',
@@ -178,7 +222,7 @@
                     image: 'eliraz.png',
                     popups: ['eliraz_1.png'],
                     width: 80, height: 80,
-                    weight: 5 // הוקטן - יופיע בתדירות נמוכה יותר
+                    weight: 5 
                 },
                 {
                     id: 'roni',
@@ -258,6 +302,7 @@
         const startBtn = document.getElementById('start-btn');
         const popupScreen = document.getElementById('popup-screen');
         const popupImage = document.getElementById('popup-image');
+        const endScreen = document.getElementById('end-screen'); // נוסף חיבור למסך הסיום
 
         let width, height;
         let score = 0;
@@ -451,6 +496,13 @@
             resumeSound.play().catch(e => console.log("Sound play error", e));
             
             popupScreen.style.display = 'none';
+            
+            // בדיקה האם סיימנו את כל התמונות של כל הדמויות
+            if (availableCharacters.length === 0) {
+                endScreen.style.display = 'flex'; // הצגת מסך הברכה
+                return; // המשחק נשאר מושהה ולא ממשיך
+            }
+
             isPaused = false;
             
             lastSpawnTime = performance.now(); 
